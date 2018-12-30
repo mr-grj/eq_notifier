@@ -3,7 +3,7 @@
 
 This projects aims to send an SMS to a specific number (using [Twilio](https://www.twilio.com/)) if an earthquake with magnitude > 4 
 is going to occur (depending on your location, this can warn you -*best scenario*- within 25-30 seconds before you feel
-the earthquake wave) .
+the earthquake wave).
 
 ---
 
