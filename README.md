@@ -2,7 +2,7 @@
 
 
 
-#####This projects aims to send an SMS to a specific number (using [Twilio](https://www.twilio.com/)) if an earthquake is going to occur.
+##### This projects aims to send an SMS to a specific number (using [Twilio](https://www.twilio.com/)) if an earthquake is going to occur.
 
 
 ## Info
@@ -19,10 +19,10 @@
 
 To run this on your local machine:
 
-* `git clone <github path>`
-* `cd eq_notifier/`
-*  `pip install -r requirements.txt`
-    * At this point, you'll have to create a twilio account (which is free) and set it up
-* `touch credentials.json`
-    * in this file you'll put the details you need (see `get_secrets()` method for an example)
-* `python eq_notifier.py` 
+```
+> git clone <github path>
+> cd eq_notifier/
+> pip install -r requirements.txt  # At this point, you'll have to create a twilio account (which is free) and set it up
+> touch credentials.json  # in this file you'll put the details you need (see `get_secrets()` method for an example)
+> python eq_notifier.py 
+```
