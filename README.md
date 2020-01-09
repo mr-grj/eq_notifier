@@ -28,3 +28,8 @@ To run this on your local machine:
 > touch credentials.json  # in this file you'll put the details you need (see `get_secrets()` method for an example)
 > python eq_notifier.py 
 ```
+
+There's also the possibility of using CLI arguments:
+
+- `twilio` (path to the credentials file)
+- `delay` (delay in seconds between two calls to the earthquake API)
