@@ -5,15 +5,17 @@ your location, this can warn you (best case scenario within 25-30
 seconds before you feel the earthquake wave).
 """
 
-import argparse
-import datetime
-import json
-import re
-import time
+from argparse import ArgumentParser
+from datetime import datetime
 from functools import partial
+from json import load, loads
+from re import search
+from time import sleep
+from typing import Dict
 
-import requests
 from lxml.html import fromstring
+from requests import Session
+
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
 
@@ -22,12 +24,12 @@ BASE_URL = 'http://alerta.infp.ro'
 DATA_URL = f'{BASE_URL}/server.php'
 
 
-def command_line_parser():
+def command_line_parser() -> ArgumentParser:
     """
     Simple command line parser function.
     """
 
-    parser = argparse.ArgumentParser(description='Earthquake Listener')
+    parser = ArgumentParser(description='Earthquake Listener')
     parser.add_argument(
         '-t', '--twilio',
         nargs='?',
@@ -44,7 +46,7 @@ def command_line_parser():
     return parser
 
 
-def credentials(filepath: str) -> dict:
+def credentials(filepath: str) -> Dict[str, str]:
     """Return secrets from `filepath` file as a dict.
 
     The file looks like this:
@@ -65,7 +67,7 @@ def credentials(filepath: str) -> dict:
     """
 
     with open(filepath) as credentials_file:
-        credentials_data = json.load(credentials_file)
+        credentials_data = load(credentials_file)
 
     if not credentials_data:
         raise ValueError('Credentials file should not be empty.')
@@ -73,7 +75,7 @@ def credentials(filepath: str) -> dict:
     return credentials_data
 
 
-def get_earthquake_data() -> dict:
+def get_earthquake_data() -> Dict[str, str]:
     """Get earthquake data from `DATA_URL`.
 
     Returns:
@@ -86,18 +88,18 @@ def get_earthquake_data() -> dict:
               }
     """
 
-    session = requests.Session()
+    session = Session()
     with session as page_session:
         html_page = page_session.get(BASE_URL).content
         html_script = fromstring(html_page).xpath('//script[contains(., "source")]/text()')[0]
         key = {
-            'keyto': re.search(
+            'keyto': search(
                 r"var source = new EventSource\('server\.php\?keyto=(.*)'\);", html_script
             ).group(1)
         }
         earthquake_data = page_session.get(f'{DATA_URL}', params=key).content
         earthquake_data = earthquake_data.decode('utf8').replace("data", '"data"').strip()
-        return json.loads(f'{{{earthquake_data}}}')
+        return loads(f'{{{earthquake_data}}}')
 
 
 def send_message(twilio_client, send_to, sent_from) -> None:
@@ -112,7 +114,7 @@ def send_message(twilio_client, send_to, sent_from) -> None:
         body = f"""ATTENTION!!!
 
         Earthquake with magnitude: {eq_magnitude} 
-        at {datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S')}!
+        at {datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')}!
         """
 
         try:
@@ -140,7 +142,7 @@ def main(credentials_data=None, delay=1.0) -> None:
     while True:
         try:
             action()
-            time.sleep(delay)
+            sleep(delay)
         except KeyboardInterrupt:
             print('Closing the program...')
             break

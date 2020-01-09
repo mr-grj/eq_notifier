@@ -29,7 +29,22 @@ To run this on your local machine:
 > python eq_notifier.py 
 ```
 
-There's also the possibility of using CLI arguments:
+There's also the possibility of providing a command line option, so that:
 
-- `twilio` (path to the credentials file)
-- `delay` (delay in seconds between two calls to the earthquake API)
+    python eatrhquake.py
+
+Would run `get_earthquake_data()`;
+
+---
+
+    python earthquake.py --twilio
+
+Would run `send_message()` with the default (credentials.json) file; and
+
+---
+
+    python earthquake.py --twilio /path/to/my/credentials.json
+
+Would run `send_message()` with a user provided file path.
+
+---
