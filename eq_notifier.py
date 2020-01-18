@@ -102,15 +102,20 @@ def get_earthquake_data() -> Dict[str, str]:
         return loads(f'{{{earthquake_data}}}')
 
 
-def send_message(twilio_client, send_to, sent_from) -> None:
+def send_message(
+        twilio_client: Client,
+        send_to: str,
+        sent_from: str,
+        max_magnitude: float = 4.5
+) -> None:
     """Send a message via Twilio if the magnitude of an earthquake
-    is bigger than 4.
+    is bigger than 4.5.
     """
 
     data = get_earthquake_data().get('data')
     eq_magnitude = data.get('mag')
 
-    if float(eq_magnitude) >= 4:
+    if float(eq_magnitude) >= max_magnitude:
         body = f"""ATTENTION!!!
 
         Earthquake with magnitude: {eq_magnitude} 
@@ -125,7 +130,7 @@ def send_message(twilio_client, send_to, sent_from) -> None:
         print('No need to worry. YET!')
 
 
-def main(credentials_data=None, delay=1.0) -> None:
+def main(credentials_data: Dict[str, str] = None, delay: float = 1.0) -> None:
     """Main entry to the program."""
 
     if credentials_data is None:
