@@ -17,7 +17,7 @@ More, this works only for *Romania, Europe* and it's using the data from [this w
 
 ## Script details
 
-* Python 3.6
+* Python 3.8
 
 To run this on your local machine:
 
@@ -31,19 +31,19 @@ To run this on your local machine:
 
 There's also the possibility of providing a command line option, so that:
 
-    python eatrhquake.py
+    python eq_notifier.py
 
 Would run `get_earthquake_data()`;
 
 ---
 
-    python earthquake.py --twilio
+    python eq_notifier.py --twilio
 
 Would run `send_message()` with the default (credentials.json) file; and
 
 ---
 
-    python earthquake.py --twilio /path/to/my/credentials.json
+    python eq_notifier.py --twilio /path/to/my/credentials.json
 
 Would run `send_message()` with a user provided file path.
 

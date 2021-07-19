@@ -15,19 +15,15 @@ from typing import Dict
 
 from lxml.html import fromstring
 from requests import Session
-
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client
-
 
 BASE_URL = 'http://alerta.infp.ro'
 DATA_URL = f'{BASE_URL}/server.php'
 
 
 def command_line_parser() -> ArgumentParser:
-    """
-    Simple command line parser function.
-    """
+    """Simple command line parser function."""
 
     parser = ArgumentParser(description='Earthquake Listener')
     parser.add_argument(
@@ -57,7 +53,6 @@ def credentials(filepath: str) -> Dict[str, str]:
           "FROM": "The number from which you'll receive the alert",
           "TO": "The number the message is sent to"
         }
-
 
     Args:
         filepath (str): Path to credentials JSON file.
@@ -106,10 +101,10 @@ def send_message(
         twilio_client: Client,
         send_to: str,
         sent_from: str,
-        max_magnitude: float = 4.5
+        max_magnitude: float = 4.0
 ) -> None:
     """Send a message via Twilio if the magnitude of an earthquake
-    is bigger than 4.5.
+    is bigger than 4.0.
     """
 
     data = get_earthquake_data().get('data')
@@ -118,7 +113,7 @@ def send_message(
     if float(eq_magnitude) >= max_magnitude:
         body = f"""ATTENTION!!!
 
-        Earthquake with magnitude: {eq_magnitude} 
+        Earthquake with magnitude: {eq_magnitude}
         at {datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M:%S')}!
         """
 
