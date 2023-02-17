@@ -26,24 +26,24 @@ To run this on your local machine:
 > cd eq_notifier/
 > pip install -r requirements.txt  # At this point, you'll have to create a twilio account (which is free) and set it up
 > touch credentials.json  # in this file you'll put the details you need (see `get_secrets()` method for an example)
-> python eq_notifier.py 
+> python main.py 
 ```
 
 There's also the possibility of providing a command line option, so that:
 
-    python eq_notifier.py
+    python main.py
 
 Would run `get_earthquake_data()`;
 
 ---
 
-    python eq_notifier.py --twilio
+    python main.py --twilio
 
 Would run `send_message()` with the default (credentials.json) file; and
 
 ---
 
-    python eq_notifier.py --twilio /path/to/my/credentials.json
+    python main.py --twilio /path/to/my/credentials.json
 
 Would run `send_message()` with a user provided file path.
 

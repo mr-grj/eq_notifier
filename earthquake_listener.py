@@ -10,17 +10,17 @@ from twilio.rest import Client
 
 
 class EarthquakeListener:
-    BASE_URL = 'http://alerta.infp.ro'
-    DATA_URL = f'{BASE_URL}/server.php'
+    BASE_URL = "http://alerta.infp.ro"
+    DATA_URL = f"{BASE_URL}/server.php"
 
     def __init__(
-            self,
-            twilio_account_sid: Optional[str] = None,
-            twilio_auth_token: Optional[str] = None,
-            from_number: Optional[str] = None,
-            to_number: Optional[str] = None,
-            delay: float = 1.0,
-            max_magnitude: float = 4.0,
+        self,
+        twilio_account_sid: Optional[str] = None,
+        twilio_auth_token: Optional[str] = None,
+        from_number: Optional[str] = None,
+        to_number: Optional[str] = None,
+        delay: float = 1.0,
+        max_magnitude: float = 4.0,
     ):
         self.twilio_client = None
         if twilio_account_sid and twilio_auth_token and from_number and to_number:
@@ -29,6 +29,7 @@ class EarthquakeListener:
         self.to_number = to_number
         self.delay = delay
         self.max_magnitude = max_magnitude
+        self.message_count = 0
 
     @staticmethod
     def load_credentials(filepath: str) -> Dict[str, str]:
@@ -42,14 +43,14 @@ class EarthquakeListener:
             response = requests.get(self.DATA_URL)
             response.raise_for_status()
         except requests.RequestException as e:
-            print(f'Error fetching earthquake data: {e}')
+            print(f"Error fetching earthquake data: {e}")
             return {}
 
-        response_text = response.text.lstrip('data: ')
+        response_text = response.text.lstrip("data: ")
         try:
             return json.loads(response_text)
         except ValueError as e:
-            print(f'Error decoding earthquake data: {e}')
+            print(f"Error decoding earthquake data: {e}")
             return {}
 
     def send_message(self, data: Dict[str, str]) -> None:
@@ -57,31 +58,43 @@ class EarthquakeListener:
         is greater than the specified threshold.
         """
         if not data:
-            print('No earthquake data found')
+            print("No earthquake data found")
             return
 
-        eq_magnitude = data.get('mag')
+        eq_magnitude = float(data.get("mag"))
         if not isinstance(eq_magnitude, (int, float)):
-            print(f'Invalid earthquake magnitude: {eq_magnitude}')
+            print(f"Invalid earthquake magnitude: {eq_magnitude}")
             return
 
         if eq_magnitude <= self.max_magnitude:
-            print(f'No need to worry. Magnitude: {eq_magnitude}')
+            # print(f"No need to worry. Magnitude: {eq_magnitude}")
             return
 
         if not self.twilio_client:
-            print('Twilio credentials not set')
+            print(
+                "Twilio credentials not set. Make sure you provided "
+                "the correct credentials filepath.\n\n"
+                "(python3 main.py --twilio /absolute/path/here.json)."
+            )
+            return
+
+        if self.message_count >= 3:
+            print("Maximum number of messages reached.")
             return
 
         body = (
-            f"ATTENTION!!!\n"
+            f"ATTENTION!\n"
             f"Earthquake with magnitude: {eq_magnitude}\n"
-            f"at {datetime.now():%Y-%m-%d %H:%M:%S}!"
+            f"at {datetime.now():%Y-%m-%d %H:%M:%S} "
+            f"coming your way!"
         )
         try:
-            self.twilio_client.messages.create(body=body, from_=self.from_number, to=self.to_number)
+            self.twilio_client.messages.create(
+                body=body, from_=self.from_number, to=self.to_number
+            )
+            self.message_count += 1
         except TwilioRestException as e:
-            print(f'Twilio API error: {e}')
+            print(f"Twilio API error: {e}")
 
     def run(self) -> None:
         """Main loop."""
