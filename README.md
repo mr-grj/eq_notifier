@@ -22,7 +22,7 @@ More, this works only for *Romania, Europe* and it's using the data from [this w
 To run this on your local machine:
 
 ```
-> git clone https://github.com/alexandru-grajdeanu/eq_notifier.git
+> git clone https://github.com/mr-grj/eq_notifier.git
 > cd eq_notifier/
 > pip install -r requirements.txt  # At this point, you'll have to create a twilio account (which is free) and set it up
 > touch credentials.json  # in this file you'll put the details you need (see `get_secrets()` method for an example)
