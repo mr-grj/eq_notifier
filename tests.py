@@ -27,3 +27,15 @@ def test_get_earthquake_data():
         listener = EarthquakeListener()
         data = listener.get_earthquake_data()
         assert data == expected_data
+
+
+def test_send_message():
+    listener = EarthquakeListener(
+        twilio_account_sid='test_sid',
+        twilio_auth_token='test_token',
+        from_number='test_from',
+        to_number='test_to'
+    )
+    with patch('twilio.rest.Client') as mock_client:
+        listener.send_message({'mag': '1.0'})
+        mock_client.assert_called_once_with('test_sid', 'test_token')
