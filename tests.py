@@ -27,3 +27,14 @@ def test_get_earthquake_data():
         listener = EarthquakeListener()
         data = listener.get_earthquake_data()
         assert data == expected_data
+
+
+def test_get_earthquake_data1():
+    response_text = 'data: {"mag":"1.0","heart":"2023-02-16 13:47:41 HEARTBEAT","sec":"30"}'
+    expected_data = {'mag': '1.0', 'heart': '2023-02-16 13:47:41 HEARTBEAT', 'sec': '30'}
+    with patch('requests.get') as mock_get:
+        mock_get.return_value.text = response_text
+        mock_get.return_value.status_code = 200
+        listener = EarthquakeListener()
+        data = listener.get_earthquake_data()
+        assert data == expected_data
