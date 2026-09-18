@@ -1,0 +1,13 @@
+[Unit]
+Description=Earthquake notifier
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=__PROJECT__
+ExecStart=__UV__ run eq-notifier run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

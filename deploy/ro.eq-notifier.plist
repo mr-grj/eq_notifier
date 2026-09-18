@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- macOS launchd agent. `make start` fills in the paths and installs it. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>ro.eq-notifier</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__UV__</string>
+    <string>run</string>
+    <string>eq-notifier</string>
+    <string>run</string>
+  </array>
+  <key>WorkingDirectory</key><string>__PROJECT__</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/eq-notifier.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/eq-notifier.log</string>
+</dict>
+</plist>

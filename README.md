@@ -89,8 +89,26 @@ uv run eq-notifier check               # one poll: source health and recent even
 uv run eq-notifier run                 # poll continuously and alert
 ```
 
-`run` is meant to stay up (a terminal, tmux, a systemd user unit, a container).
-Stop it with Ctrl-C. Add `-v` for debug logging.
+`run` stays in the foreground until Ctrl-C. Add `-v` for debug logging.
+
+## Running it all the time
+
+`make start` installs a user service from `deploy/` and starts it: a launchd
+agent on macOS (logs in `~/Library/Logs/eq-notifier.log`), a systemd user unit
+on Linux (logs in `journalctl --user -u eq-notifier`). It starts at login,
+restarts if it crashes, and never resends an alert after a restart.
+
+```sh
+make start      # install or refresh the service and start it
+make status
+make logs
+make restart    # after editing .env or pulling changes
+make stop       # stop and uninstall the service
+```
+
+Run it on a machine that does not sleep. A laptop with the lid closed stops
+polling. On Linux, run `sudo loginctl enable-linger $USER` once so the service
+survives logout.
 
 ## Development
 
@@ -100,6 +118,7 @@ make format   # ruff check --fix, ruff format
 make test     # pytest
 make run      # eq-notifier run
 make poll     # eq-notifier check (one poll, sends nothing)
+make start / stop / restart / status / logs   # background service, see above
 ```
 
 Or call the tools directly with `uv run ruff check .`, `uv run ruff format --check .`,
