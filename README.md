@@ -49,7 +49,7 @@ source that was down, does not resend the alert.
 | Notifier | Cost | Setup |
 | --- | --- | --- |
 | `ntfy` (default) | Free (ntfy.sh, 250 messages/day) | Install the ntfy app, subscribe to a hard-to-guess topic, set `NTFY_TOPIC`. Alerts are sent with maximum priority. |
-| `telegram` | Free | Create a bot with @BotFather, open a chat with it, read your chat id from `https://api.telegram.org/bot<TOKEN>/getUpdates`. |
+| `telegram` | Free | Create a bot with @BotFather, open a chat with it and send it a message, then read `"chat":{"id":...}` from `https://api.telegram.org/bot<TOKEN>/getUpdates` (an empty result means no message was sent yet). Your own user id from @userinfobot works too. |
 | `twilio` | Paid | SMS via the Twilio REST API. Trial accounts can only text verified numbers with template bodies, so treat this as a paid option. Kept for those who want SMS. |
 
 No genuinely free, production-usable SMS provider was found, so push
