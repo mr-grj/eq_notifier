@@ -1,0 +1,40 @@
+[project]
+name = "eq-notifier"
+version = "1.0.0"
+description = "Small earthquake notifier for Romania: polls public seismic feeds and pushes an alert to your phone."
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "httpx>=0.28",
+    "python-dotenv>=1.1",
+]
+
+[project.scripts]
+eq-notifier = "eq_notifier.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "ruff>=0.16",
+    "ty>=0.0.80",
+]
+
+[build-system]
+requires = ["uv_build>=0.12"]
+build-backend = "uv_build"
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,4 +1,8 @@
-credentials.json
-.idea
-venv/
+.venv/
 __pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.env
+.idea/
+dist/
