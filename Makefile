@@ -30,7 +30,7 @@ DOMAIN  := gui/$(shell id -u)
 start:          ## install (or refresh) the service and start it at login
 	mkdir -p $(dir $(PLIST)) $(HOME)/Library/Logs
 	$(call render,deploy/$(SERVICE).plist,$(PLIST))
-	-launchctl bootout $(DOMAIN)/$(SERVICE) 2>/dev/null
+	launchctl bootout $(DOMAIN)/$(SERVICE) 2>/dev/null || true
 	launchctl bootstrap $(DOMAIN) $(PLIST)
 	@echo "started; logs: make logs"
 
