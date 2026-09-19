@@ -1,6 +1,7 @@
-.PHONY: run check format test poll start stop restart status logs
+.PHONY: run check format test poll start stop restart status logs menubar
 
-UV      := $(shell command -v uv)
+# Fallback for callers without a shell PATH, such as the SwiftBar plugin.
+UV      := $(or $(shell command -v uv),$(HOME)/.local/bin/uv)
 PROJECT := $(CURDIR)
 render   = sed -e 's|__UV__|$(UV)|g' -e 's|__PROJECT__|$(PROJECT)|g' -e 's|__HOME__|$(HOME)|g' $(1) > $(2)
 
@@ -22,51 +23,10 @@ test:           ## run the test suite
 poll:           ## one poll: source health and recent events, sends nothing
 	uv run eq-notifier check
 
+# Background service targets (start, stop, restart, status, logs): launchd on
+# macOS, systemd --user elsewhere. Only one of the two files is included.
 ifeq ($(shell uname -s),Darwin)
-SERVICE := ro.eq-notifier
-PLIST   := $(HOME)/Library/LaunchAgents/$(SERVICE).plist
-DOMAIN  := gui/$(shell id -u)
-
-start:          ## install (or refresh) the service and start it at login
-	mkdir -p $(dir $(PLIST)) $(HOME)/Library/Logs
-	$(call render,deploy/$(SERVICE).plist,$(PLIST))
-	launchctl bootout $(DOMAIN)/$(SERVICE) 2>/dev/null || true
-	launchctl bootstrap $(DOMAIN) $(PLIST)
-	@echo "started; logs: make logs"
-
-stop:           ## stop the service and stop starting it at login
-	launchctl bootout $(DOMAIN)/$(SERVICE)
-	rm -f $(PLIST)
-
-restart:
-	launchctl kickstart -k $(DOMAIN)/$(SERVICE)
-
-status:
-	launchctl print $(DOMAIN)/$(SERVICE) 2>/dev/null | grep -E 'state|pid|last exit' || echo "not running"
-
-logs:
-	tail -n 50 -f $(HOME)/Library/Logs/eq-notifier.log
+include deploy/macos.mk
 else
-SERVICE := eq-notifier
-UNIT    := $(HOME)/.config/systemd/user/$(SERVICE).service
-
-start:          ## install (or refresh) the service and start it at boot
-	mkdir -p $(dir $(UNIT))
-	$(call render,deploy/$(SERVICE).service,$(UNIT))
-	systemctl --user daemon-reload
-	systemctl --user enable --now $(SERVICE)
-	@echo "started; run 'sudo loginctl enable-linger $$USER' once to survive logout"
-
-stop:           ## stop the service and stop starting it at boot
-	systemctl --user disable --now $(SERVICE)
-	rm -f $(UNIT)
-
-restart:
-	systemctl --user restart $(SERVICE)
-
-status:
-	systemctl --user status $(SERVICE) --no-pager
-
-logs:
-	journalctl --user -u $(SERVICE) -f
+include deploy/linux.mk
 endif

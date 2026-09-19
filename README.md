@@ -102,9 +102,14 @@ restarts if it crashes, and never resends an alert after a restart.
 make start      # install or refresh the service and start it
 make status
 make logs
-make restart    # after editing .env or pulling changes
+make restart    # after editing .env or pulling changes (same as start on macOS)
 make stop       # stop and uninstall the service
 ```
+
+On macOS, `make menubar` installs [SwiftBar](https://github.com/swiftbar/SwiftBar)
+through Homebrew and adds a small menu bar icon (`deploy/eq-notifier.5s.sh`):
+green while the service runs, grey when stopped, with the last log lines and
+Start / Stop / Restart entries.
 
 Run it on a machine that does not sleep. A laptop with the lid closed stops
 polling. On Linux, run `sudo loginctl enable-linger $USER` once so the service
@@ -119,6 +124,7 @@ make test     # pytest
 make run      # eq-notifier run
 make poll     # eq-notifier check (one poll, sends nothing)
 make start / stop / restart / status / logs   # background service, see above
+make menubar  # macOS status icon via SwiftBar
 ```
 
 Or call the tools directly with `uv run ruff check .`, `uv run ruff format --check .`,
