@@ -1,5 +1,5 @@
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -55,6 +55,9 @@ class Earthquake:
         return close_in_time and (
             self.distance_km(other.latitude, other.longitude) <= SAME_EVENT_DISTANCE_KM
         )
+
+
+type Sink = Callable[[list[Earthquake]], None]
 
 
 @dataclass(frozen=True, slots=True)

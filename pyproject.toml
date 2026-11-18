@@ -1,12 +1,13 @@
 [project]
 name = "eq-notifier"
-version = "1.0.0"
+version = "1.1.0"
 description = "Small earthquake notifier for Romania: polls public seismic feeds and pushes an alert to your phone."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "httpx>=0.28",
     "python-dotenv>=1.1",
+    "websockets>=17.4",
 ]
 
 [project.scripts]

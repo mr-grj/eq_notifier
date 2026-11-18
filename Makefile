@@ -20,7 +20,7 @@ format:         ## fix lint issues and reformat
 test:           ## run the test suite
 	uv run pytest
 
-poll:           ## one poll: source health and recent events, sends nothing
+poll:           ## feed health (incl. the stream) and recent events, sends nothing
 	uv run eq-notifier check
 
 # Background service targets (start, stop, restart, status, logs): launchd on

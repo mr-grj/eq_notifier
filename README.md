@@ -1,8 +1,9 @@
 # eq-notifier
 
-A small personal earthquake notifier for Romania. It polls public seismic feeds
-(INFP, EMSC, USGS), merges reports of the same earthquake, and pushes one alert
-to your phone when an event matches your magnitude and distance settings.
+A small personal earthquake notifier for Romania. It listens to EMSC's real-time
+stream, polls public seismic feeds (INFP, EMSC, USGS) as a safety net, merges
+reports of the same earthquake, and pushes one alert to your phone when an event
+matches your magnitude and distance settings.
 
 ## What it does and does not do
 
@@ -16,31 +17,65 @@ to your phone when an event matches your magnitude and distance settings.
 - It is an experimental personal tool, **not a replacement for official emergency
   warning systems** such as RO-ALERT.
 
-## Earthquake sources
+## Earthquake feeds
 
-| Source | Who | Interface | Notes |
+| Feed | Who | Interface | Notes |
 | --- | --- | --- | --- |
+| `emsc-stream` | EMSC, European-Mediterranean Seismological Centre | Websocket push (`wss://www.seismicportal.eu/standing_order/websocket`) | The fastest path: every new or revised event worldwide arrives a second or two after EMSC publishes it, with no polling delay. On by default; `EQ_EMSC_STREAM=false` turns it off. |
 | `infp` | INFP, Romania's National Institute for Earth Physics (official) | FDSN event web service, text format | The service is live, but its public catalog has not been updated since September 2025. It is kept enabled because it is the authoritative Romanian source and costs one small request per poll. INFP's real-time alert page now sits behind a CAPTCHA and has no public API, so it is deliberately not scraped. |
 | `emsc` | EMSC, European-Mediterranean Seismological Centre | FDSN event web service, GeoJSON | Fast and current for Romania. |
 | `usgs` | USGS, United States Geological Survey | FDSN event web service, GeoJSON | Current, mostly for magnitude 4+ events in Europe. |
 
-All three are queried concurrently on every poll, each with its own timeout.
-A source that is down, slow, or returns garbage is logged and skipped; the cycle
-continues with whatever the other sources returned.
+The polled sources are queried concurrently every `EQ_POLL_INTERVAL_SECONDS`,
+and each answer is acted on the moment it arrives, so a slow source never holds
+back a fast one. A source that is down, slow, or returns garbage is logged and
+skipped. The stream reconnects on its own with exponential backoff (1 s up to
+60 s), detects dead connections with keepalive pings, and reconnects if it has
+been silent for 10 minutes. Polling keeps working while the stream is down, and
+the stream keeps working while the polled sources are down.
+
+## How it fits together
+
+```
+emsc-stream thread ──┐
+                     ├──> queue ──> alerter (main thread) ──> notifiers
+poller thread ───────┘              decide · deduplicate · remember
+```
+
+Each feed runs in its own thread and only hands over reports. All decisions
+(freshness, area, magnitude, duplicates, delivery, the state file) happen in
+one place, on one thread, so nothing needs locking. If a feed thread ever stops,
+the process exits so launchd or systemd restarts it cleanly instead of running
+half-blind.
+
+## How fast is an alert?
+
+Alert time = time for EMSC (or another agency) to publish the event + a second or two
+for the stream to deliver it + notification delivery. Agencies publish
+automatic solutions for Romanian events within minutes, often less. Without the
+stream, polling adds up to `EQ_POLL_INTERVAL_SECONDS` on top. Each alert logs
+`Earthquake detected Ns after origin`, so you can see the real latency.
+
+This is not an early-warning system. Android's earthquake alerts and RO-ALERT
+detect shaking from sensor networks within seconds; for a deep Vrancea event,
+strong shaking reaches Bucharest roughly 30 seconds after origin, before any
+catalog can publish it.
 
 ## Alerts and deduplication
 
-An earthquake alerts when **any** source reports it with magnitude at or above
-`EQ_MIN_MAGNITUDE` (default 4.0). If you set `EQ_LATITUDE`/`EQ_LONGITUDE`, the
-epicentre must also lie within `EQ_RADIUS_KM` (default 300) of you, and the
-message includes the distance. Events older than `EQ_MAX_EVENT_AGE_MINUTES`
+An earthquake alerts when **any** report of it has magnitude at or above
+`EQ_MIN_MAGNITUDE` (default 4.0) and lies in your area: within `EQ_RADIUS_KM`
+(default 300) of `EQ_LATITUDE`/`EQ_LONGITUDE` if you set them (the message then
+includes the distance), otherwise inside the Romania region. A revised magnitude
+counts too: an event first reported as M3.8 alerts when EMSC revises it to M4.2. Events older than `EQ_MAX_EVENT_AGE_MINUTES`
 (default 60) are ignored, so a restart never replays old history.
 
 Sources do not share event IDs, so reports are matched by origin time and
 epicentre: two reports within 90 seconds and 100 km of each other are treated
-as the same earthquake. Each earthquake produces exactly one alert. The message
-uses the values of the highest-priority source that reported it (the order in
-`EQ_SOURCES`) and lists every source's magnitude. Alerted events are remembered
+as the same earthquake. Each earthquake produces exactly one alert, sent on the
+first report that qualifies; reports that arrive later only confirm it. When
+several sources arrive together, the message uses the highest-priority one (the
+order in `EQ_SOURCES`) and lists every source's magnitude. Alerted events are remembered
 in a small JSON file (`EQ_STATE_FILE`) so a restart, or a late report from a
 source that was down, does not resend the alert.
 
@@ -54,8 +89,8 @@ source that was down, does not resend the alert.
 
 No genuinely free, production-usable SMS provider was found, so push
 notifications are the default. More than one notifier can be enabled; an alert
-counts as delivered when at least one succeeds, otherwise it is retried on the
-next poll.
+counts as delivered when at least one succeeds, otherwise it is retried the next
+time a feed reports the event (at the latest on the next poll).
 
 ## Setup
 
@@ -85,7 +120,7 @@ and every problem is reported at once. Secrets never go in the repository.
 
 ```sh
 uv run eq-notifier test-notification   # confirm alerts reach your phone
-uv run eq-notifier check               # one poll: source health and recent events, sends nothing
+uv run eq-notifier check               # feed health (incl. the stream) and recent events, sends nothing
 uv run eq-notifier run                 # poll continuously and alert
 ```
 
@@ -111,9 +146,14 @@ through Homebrew and adds a small menu bar icon (`deploy/eq-notifier.5s.sh`):
 green while the service runs, grey when stopped, with the last log lines and
 Start / Stop / Restart entries.
 
-Run it on a machine that does not sleep. A laptop with the lid closed stops
-polling. On Linux, run `sudo loginctl enable-linger $USER` once so the service
-survives logout.
+A sleeping machine does not poll, so alerts wait until it wakes. On macOS the
+service runs under `caffeinate -is`, which keeps the Mac from idle-sleeping
+while the service is up. A laptop with its lid closed still sleeps, so keep the
+lid open or use a machine that stays on. On Linux, make sure the machine does
+not suspend, and run `sudo loginctl enable-linger $USER` once so the service
+survives logout. Polls follow the wall clock: after a wake the next poll runs
+straight away, and the log warns `No poll for ...s (machine asleep?)` when
+polls were missed.
 
 ## Development
 
@@ -131,7 +171,8 @@ Or call the tools directly with `uv run ruff check .`, `uv run ruff format --che
 `uv run ty check`, `uv run pytest`.
 
 Layout: `config.py` (settings), `events.py` (normalised earthquake and
-deduplication), `sources.py` (feed providers), `notifiers.py` (delivery
-channels), `state.py` (remembered alerts), `app.py` (one polling cycle),
-`cli.py`. To add a feed or a channel, implement the small protocol in
-`sources.py` or `notifiers.py` and register it there.
+deduplication), `sources.py` (polled feeds), `streams.py` (push feeds),
+`notifiers.py` (delivery channels), `state.py` (remembered alerts), `app.py`
+(alerter, poller and the threads that tie them together), `cli.py`. To add a
+feed or a channel, implement the small protocol in `sources.py`, `streams.py`
+or `notifiers.py` and register it there.

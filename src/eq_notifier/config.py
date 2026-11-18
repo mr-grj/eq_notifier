@@ -6,6 +6,8 @@ from pathlib import Path
 
 KNOWN_SOURCES = ("infp", "emsc", "usgs")
 KNOWN_NOTIFIERS = ("ntfy", "telegram", "twilio")
+TRUE_WORDS = frozenset({"1", "true", "yes", "on"})
+FALSE_WORDS = frozenset({"0", "false", "no", "off"})
 
 DEFAULT_STATE_FILE = Path.home() / ".local" / "state" / "eq-notifier" / "seen-events.json"
 
@@ -27,6 +29,13 @@ class BoundingBox:
     min_longitude: float
     max_longitude: float
 
+    def contains(self, latitude: float, longitude: float) -> bool:
+        """Whether the point lies inside the box."""
+        return (
+            self.min_latitude <= latitude <= self.max_latitude
+            and self.min_longitude <= longitude <= self.max_longitude
+        )
+
 
 # Romania plus a margin, used when no user location is configured.
 ROMANIA_BBOX = BoundingBox(
@@ -42,6 +51,7 @@ class Settings:
     poll_interval_seconds: float = 30.0
     max_event_age: timedelta = timedelta(minutes=60)
     sources: tuple[str, ...] = KNOWN_SOURCES
+    emsc_stream: bool = True
     notifiers: tuple[str, ...] = ()
     state_file: Path = DEFAULT_STATE_FILE
     ntfy_server: str = "https://ntfy.sh"
@@ -83,6 +93,15 @@ class Settings:
                 problems.append(f"{name} must be a number, got {raw!r}")
                 return default
 
+        def flag(name: str, default: bool) -> bool:
+            raw = env.get(name, "").strip().lower()
+            if not raw:
+                return default
+            if raw in TRUE_WORDS or raw in FALSE_WORDS:
+                return raw in TRUE_WORDS
+            problems.append(f"{name} must be true or false, got {raw!r}")
+            return default
+
         def names(name: str, default: tuple[str, ...], known: tuple[str, ...]) -> tuple[str, ...]:
             raw = env.get(name, "").strip()
             if not raw:
@@ -118,6 +137,7 @@ class Settings:
             poll_interval_seconds=number("EQ_POLL_INTERVAL_SECONDS", 30.0),
             max_event_age=timedelta(minutes=number("EQ_MAX_EVENT_AGE_MINUTES", 60.0)),
             sources=names("EQ_SOURCES", KNOWN_SOURCES, KNOWN_SOURCES),
+            emsc_stream=flag("EQ_EMSC_STREAM", True),
             notifiers=notifiers,
             state_file=Path(
                 env.get("EQ_STATE_FILE", "").strip() or DEFAULT_STATE_FILE

@@ -4,8 +4,8 @@ To add a source: implement the `Source` protocol and register it in `SOURCES`.
 """
 
 import logging
-from collections.abc import Callable, Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -36,6 +36,28 @@ class Source(Protocol):
 def _parse_utc(value: str) -> datetime:
     parsed = datetime.fromisoformat(value)
     return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+
+def describe_error(exc: BaseException) -> str:
+    """Short error text for logs: the exception type plus its message, if any."""
+    kind = type(exc).__name__
+    return f"{kind}: {exc}" if str(exc) else kind
+
+
+def parse_emsc_feature(feature: dict[str, Any]) -> Earthquake:
+    """Normalise one EMSC GeoJSON feature, as served by both the FDSN API and the stream."""
+    props = feature["properties"]
+    return Earthquake(
+        source=EmscSource.name,
+        event_id=str(props["unid"]),
+        time=_parse_utc(props["time"]),
+        latitude=float(props["lat"]),
+        longitude=float(props["lon"]),
+        depth_km=float(props["depth"]) if props.get("depth") is not None else None,
+        magnitude=float(props["mag"]),
+        region=str(props.get("flynn_region") or ""),
+        url=f"https://www.seismicportal.eu/eventdetails.html?unid={props['unid']}",
+    )
 
 
 def _get(client: httpx.Client, url: str, params: dict[str, Any]) -> httpx.Response | None:
@@ -129,21 +151,7 @@ class EmscSource:
         }
         if (response := _get(client, self.url, params)) is None:
             return []
-        return _normalise_all(self.name, _features(_json(response)), self._normalise)
-
-    def _normalise(self, feature: dict[str, Any]) -> Earthquake:
-        props = feature["properties"]
-        return Earthquake(
-            source=self.name,
-            event_id=str(props["unid"]),
-            time=_parse_utc(props["time"]),
-            latitude=float(props["lat"]),
-            longitude=float(props["lon"]),
-            depth_km=float(props["depth"]) if props.get("depth") is not None else None,
-            magnitude=float(props["mag"]),
-            region=str(props.get("flynn_region") or ""),
-            url=f"https://www.seismicportal.eu/eventdetails.html?unid={props['unid']}",
-        )
+        return _normalise_all(self.name, _features(_json(response)), parse_emsc_feature)
 
 
 class UsgsSource:
@@ -207,16 +215,24 @@ def _fetch_one(
     try:
         return FetchResult(source.name, source.fetch(client, since, bbox))
     except (httpx.HTTPError, SourceError) as exc:
-        detail = str(exc)
-        kind = type(exc).__name__
-        return FetchResult(source.name, error=f"{kind}: {detail}" if detail else kind)
+        return FetchResult(source.name, error=describe_error(exc))
+
+
+def fetch_each(
+    sources: Sequence[Source], client: httpx.Client, since: datetime, bbox: BoundingBox
+) -> Iterator[FetchResult]:
+    """Query every source concurrently and yield each result the moment it arrives."""
+    if not sources:
+        return
+    with ThreadPoolExecutor(max_workers=len(sources)) as pool:
+        futures = [pool.submit(_fetch_one, source, client, since, bbox) for source in sources]
+        for future in as_completed(futures):
+            yield future.result()
 
 
 def fetch_all(
     sources: Sequence[Source], client: httpx.Client, since: datetime, bbox: BoundingBox
 ) -> list[FetchResult]:
-    """Query every source concurrently; a failing source yields an error, never an exception."""
-    if not sources:
-        return []
-    with ThreadPoolExecutor(max_workers=len(sources)) as pool:
-        return list(pool.map(lambda source: _fetch_one(source, client, since, bbox), sources))
+    """Query every source concurrently and return the results in source order."""
+    order = {source.name: position for position, source in enumerate(sources)}
+    return sorted(fetch_each(sources, client, since, bbox), key=lambda r: order[r.source])

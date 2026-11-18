@@ -9,7 +9,13 @@ def test_defaults_when_env_is_empty() -> None:
     assert settings.location is None
     assert settings.sources == ("infp", "emsc", "usgs")
     assert settings.notifiers == ()
+    assert settings.emsc_stream is True
     assert settings.bbox == ROMANIA_BBOX
+
+
+@pytest.mark.parametrize(("raw", "expected"), [("0", False), ("off", False), ("Yes", True)])
+def test_emsc_stream_flag(raw: str, expected: bool) -> None:
+    assert Settings.from_env({"EQ_EMSC_STREAM": raw}).emsc_stream is expected
 
 
 def test_full_configuration_is_parsed() -> None:
@@ -47,6 +53,7 @@ def test_all_problems_are_listed_at_once() -> None:
         "EQ_SOURCES": "infp,bogus",
         "EQ_LATITUDE": "44.4",
         "EQ_POLL_INTERVAL_SECONDS": "1",
+        "EQ_EMSC_STREAM": "maybe",
     }
     with pytest.raises(ConfigError) as info:
         Settings.from_env(env)
@@ -55,3 +62,4 @@ def test_all_problems_are_listed_at_once() -> None:
     assert "bogus" in text
     assert "EQ_LATITUDE and EQ_LONGITUDE must be set together" in text
     assert "EQ_POLL_INTERVAL_SECONDS must be at least 5" in text
+    assert "EQ_EMSC_STREAM must be true or false" in text
