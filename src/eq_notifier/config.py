@@ -2,14 +2,29 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
+from enum import StrEnum
 from pathlib import Path
 
-KNOWN_SOURCES = ("infp", "emsc", "usgs")
-KNOWN_NOTIFIERS = ("ntfy", "telegram", "twilio")
 TRUE_WORDS = frozenset({"1", "true", "yes", "on"})
 FALSE_WORDS = frozenset({"0", "false", "no", "off"})
 
 DEFAULT_STATE_FILE = Path.home() / ".local" / "state" / "eq-notifier" / "seen-events.json"
+
+
+class SourceName(StrEnum):
+    """Polled feeds, in their default priority order."""
+
+    INFP = "infp"
+    EMSC = "emsc"
+    USGS = "usgs"
+
+
+class NotifierName(StrEnum):
+    """Delivery channels."""
+
+    NTFY = "ntfy"
+    TELEGRAM = "telegram"
+    TWILIO = "twilio"
 
 
 class ConfigError(Exception):
@@ -50,9 +65,9 @@ class Settings:
     radius_km: float = 300.0
     poll_interval_seconds: float = 30.0
     max_event_age: timedelta = timedelta(minutes=60)
-    sources: tuple[str, ...] = KNOWN_SOURCES
+    sources: tuple[SourceName, ...] = tuple(SourceName)
     emsc_stream: bool = True
-    notifiers: tuple[str, ...] = ()
+    notifiers: tuple[NotifierName, ...] = ()
     state_file: Path = DEFAULT_STATE_FILE
     ntfy_server: str = "https://ntfy.sh"
     ntfy_topic: str = ""
@@ -81,6 +96,7 @@ class Settings:
 
     @classmethod
     def from_env(cls, env: Mapping[str, str]) -> Settings:
+        """Read and validate the settings, reporting every problem at once."""
         problems: list[str] = []
 
         def number(name: str, default: float) -> float:
@@ -102,18 +118,17 @@ class Settings:
             problems.append(f"{name} must be true or false, got {raw!r}")
             return default
 
-        def names(name: str, default: tuple[str, ...], known: tuple[str, ...]) -> tuple[str, ...]:
+        def names[E: StrEnum](name: str, choices: type[E], default: tuple[E, ...]) -> tuple[E, ...]:
             raw = env.get(name, "").strip()
             if not raw:
                 return default
-            chosen = tuple(part.strip().lower() for part in raw.split(",") if part.strip())
-            if unknown := [n for n in chosen if n not in known]:
-                problems.append(
-                    f"{name} contains unknown names {unknown}; choose from {list(known)}"
-                )
-            return chosen
+            chosen = [part.strip().lower() for part in raw.split(",") if part.strip()]
+            if unknown := [n for n in chosen if n not in choices]:
+                known = [choice.value for choice in choices]
+                problems.append(f"{name} contains unknown names {unknown}; choose from {known}")
+            return tuple(choices(n) for n in chosen if n in choices)
 
-        def credential(name: str, notifier: str) -> str:
+        def credential(name: str, notifier: NotifierName) -> str:
             value = env.get(name, "").strip()
             if notifier in notifiers and not value:
                 problems.append(f"{name} is required when {notifier} is enabled")
@@ -129,28 +144,28 @@ class Settings:
                 if not (-90 <= location.latitude <= 90 and -180 <= location.longitude <= 180):
                     problems.append("EQ_LATITUDE/EQ_LONGITUDE are out of range")
 
-        notifiers = names("EQ_NOTIFIERS", (), KNOWN_NOTIFIERS)
+        notifiers = names("EQ_NOTIFIERS", NotifierName, ())
         settings = cls(
             min_magnitude=number("EQ_MIN_MAGNITUDE", 4.0),
             location=location,
             radius_km=number("EQ_RADIUS_KM", 300.0),
             poll_interval_seconds=number("EQ_POLL_INTERVAL_SECONDS", 30.0),
             max_event_age=timedelta(minutes=number("EQ_MAX_EVENT_AGE_MINUTES", 60.0)),
-            sources=names("EQ_SOURCES", KNOWN_SOURCES, KNOWN_SOURCES),
+            sources=names("EQ_SOURCES", SourceName, tuple(SourceName)),
             emsc_stream=flag("EQ_EMSC_STREAM", True),
             notifiers=notifiers,
             state_file=Path(
                 env.get("EQ_STATE_FILE", "").strip() or DEFAULT_STATE_FILE
             ).expanduser(),
             ntfy_server=env.get("NTFY_SERVER", "").strip().rstrip("/") or "https://ntfy.sh",
-            ntfy_topic=credential("NTFY_TOPIC", "ntfy"),
+            ntfy_topic=credential("NTFY_TOPIC", NotifierName.NTFY),
             ntfy_token=env.get("NTFY_TOKEN", "").strip(),
-            telegram_bot_token=credential("TELEGRAM_BOT_TOKEN", "telegram"),
-            telegram_chat_id=credential("TELEGRAM_CHAT_ID", "telegram"),
-            twilio_account_sid=credential("TWILIO_ACCOUNT_SID", "twilio"),
-            twilio_auth_token=credential("TWILIO_AUTH_TOKEN", "twilio"),
-            twilio_from=credential("TWILIO_FROM", "twilio"),
-            twilio_to=credential("TWILIO_TO", "twilio"),
+            telegram_bot_token=credential("TELEGRAM_BOT_TOKEN", NotifierName.TELEGRAM),
+            telegram_chat_id=credential("TELEGRAM_CHAT_ID", NotifierName.TELEGRAM),
+            twilio_account_sid=credential("TWILIO_ACCOUNT_SID", NotifierName.TWILIO),
+            twilio_auth_token=credential("TWILIO_AUTH_TOKEN", NotifierName.TWILIO),
+            twilio_from=credential("TWILIO_FROM", NotifierName.TWILIO),
+            twilio_to=credential("TWILIO_TO", NotifierName.TWILIO),
         )
 
         if settings.poll_interval_seconds < 5:

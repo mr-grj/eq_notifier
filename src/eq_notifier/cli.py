@@ -10,9 +10,9 @@ from dotenv import load_dotenv
 
 from eq_notifier import __version__
 from eq_notifier.app import Alerter, make_client, run
-from eq_notifier.config import ConfigError, Settings
+from eq_notifier.config import ConfigError, NotifierName, Settings
 from eq_notifier.notifiers import build_notifiers, send_all
-from eq_notifier.sources import SOURCES, Source, fetch_all
+from eq_notifier.sources import Poller, Source, build_sources, fetch_all
 from eq_notifier.state import SeenEvents
 from eq_notifier.streams import Stream, build_streams
 
@@ -80,12 +80,12 @@ def main(argv: list[str] | None = None) -> None:
         settings = Settings.from_env(os.environ)
         if args.command != "check" and not settings.notifiers:
             raise ConfigError(
-                "EQ_NOTIFIERS must name at least one notifier (ntfy, telegram, twilio)"
+                f"EQ_NOTIFIERS must name at least one notifier ({', '.join(NotifierName)})"
             )
     except ConfigError as exc:
         parser.exit(2, f"{exc}\n")
 
-    sources = [SOURCES[name] for name in settings.sources]
+    sources = build_sources(settings)
     streams = build_streams(settings)
     notifiers = build_notifiers(settings)
 
@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> None:
         match args.command:
             case "run":
                 try:
-                    run(alerter, sources, streams)
+                    run(alerter, [Poller(settings, sources, client), *streams])
                 except KeyboardInterrupt:
                     log.info("Stopped")
             case "check":

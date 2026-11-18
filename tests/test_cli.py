@@ -5,12 +5,11 @@ import pytest
 
 from eq_notifier.app import Alerter
 from eq_notifier.cli import check, main
-from eq_notifier.config import Settings
+from eq_notifier.config import Settings, SourceName
 from eq_notifier.sources import SourceError
 from eq_notifier.state import SeenEvents
 
-from .conftest import make_quake
-from .test_app import FakeSource, FakeStream
+from .conftest import FakeSource, FakeStream, make_quake
 
 
 def test_run_without_a_notifier_fails_clearly(capsys, tmp_path) -> None:
@@ -47,7 +46,7 @@ def test_check_shows_feed_health_and_verdicts_without_sending(capsys, tmp_path) 
         ),
     ]
     with httpx.Client() as client:
-        alerter = Alerter(Settings(sources=("infp", "emsc")), [], seen, client)
+        alerter = Alerter(Settings(sources=(SourceName.INFP, SourceName.EMSC)), [], seen, client)
         check(alerter, sources, [FakeStream([])])
 
     out = capsys.readouterr().out

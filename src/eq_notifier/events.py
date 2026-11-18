@@ -1,7 +1,9 @@
 import math
+import threading
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 EARTH_RADIUS_KM = 6371.0
 
@@ -60,12 +62,24 @@ class Earthquake:
 type Sink = Callable[[list[Earthquake]], None]
 
 
+class Feed(Protocol):
+    """Hands earthquake reports to a sink until told to stop."""
+
+    @property
+    def name(self) -> str: ...
+
+    def run(self, sink: Sink, stop: threading.Event) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class EventGroup:
-    """All reports of one physical earthquake; `primary` comes from the highest-priority source."""
+    """All reports of one physical earthquake, the highest-priority source's report first."""
 
-    primary: Earthquake
     reports: tuple[Earthquake, ...]
+
+    @property
+    def primary(self) -> Earthquake:
+        return self.reports[0]
 
     @property
     def sources(self) -> tuple[str, ...]:
@@ -98,4 +112,4 @@ def group_duplicates(
                 break
         else:
             groups.append([event])
-    return [EventGroup(primary=group[0], reports=tuple(group)) for group in groups]
+    return [EventGroup(tuple(group)) for group in groups]

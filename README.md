@@ -170,9 +170,11 @@ make menubar  # macOS status icon via SwiftBar
 Or call the tools directly with `uv run ruff check .`, `uv run ruff format --check .`,
 `uv run ty check`, `uv run pytest`.
 
-Layout: `config.py` (settings), `events.py` (normalised earthquake and
-deduplication), `sources.py` (polled feeds), `streams.py` (push feeds),
+Layout: `config.py` (settings and the source/notifier names), `events.py`
+(normalised earthquake, deduplication and the `Feed` contract), `sources.py`
+(polled FDSN services and the poller), `streams.py` (push feeds),
 `notifiers.py` (delivery channels), `state.py` (remembered alerts), `app.py`
-(alerter, poller and the threads that tie them together), `cli.py`. To add a
-feed or a channel, implement the small protocol in `sources.py`, `streams.py`
-or `notifiers.py` and register it there.
+(the alerter and the threads that feed it), `cli.py`. To add a polled source,
+name it in `SourceName`, subclass `FdsnSource` and register it in `SOURCES`; to
+add a channel, name it in `NotifierName` and build it in `build_notifier`; a
+push feed implements `Stream` and is added in `build_streams`.

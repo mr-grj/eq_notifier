@@ -43,6 +43,15 @@ def test_telegram_rejection_is_reported_without_leaking_the_token(mock_client) -
     assert "SECRET" not in str(info.value)
 
 
+@pytest.mark.parametrize("body", ["<html>Bad Gateway</html>", "[]"])
+def test_telegram_outage_without_a_json_object_is_retryable(mock_client, body) -> None:
+    handler = lambda request: httpx.Response(502, text=body)  # noqa: E731
+    with mock_client(handler) as client, pytest.raises(NotificationError) as info:
+        TelegramNotifier("123:SECRET", "42").send(client, "T", "body")
+    assert str(info.value) == "telegram: HTTP 502"
+    assert info.value.retryable
+
+
 def test_twilio_uses_basic_auth_and_form_fields(mock_client) -> None:
     requests: list[httpx.Request] = []
 

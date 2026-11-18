@@ -1,17 +1,25 @@
 import json
-from datetime import UTC, datetime, timedelta
+import logging
+import threading
+from datetime import UTC, datetime
 
 import httpx
 import pytest
 
-from eq_notifier.config import ROMANIA_BBOX
+from eq_notifier.config import ROMANIA_BBOX, Settings, SourceName
+from eq_notifier.events import Earthquake
 from eq_notifier.sources import (
+    SOURCES,
     EmscSource,
     InfpSource,
+    Poller,
     SourceError,
     UsgsSource,
+    build_sources,
     fetch_all,
 )
+
+from .conftest import FakeSource, make_quake
 
 SINCE = datetime(2026, 9, 18, 11, 0, tzinfo=UTC)
 
@@ -113,7 +121,11 @@ def test_usgs_geojson_is_normalised(mock_client) -> None:
     assert event.region.endswith("Romania")
 
 
-def test_query_window_is_sent_to_the_feed(mock_client) -> None:
+@pytest.mark.parametrize(
+    ("source", "fmt"),
+    [(InfpSource(), "text"), (EmscSource(), "json"), (UsgsSource(), "geojson")],
+)
+def test_query_window_is_sent_to_the_feed(mock_client, source, fmt) -> None:
     seen: list[httpx.URL] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -121,11 +133,13 @@ def test_query_window_is_sent_to_the_feed(mock_client) -> None:
         return httpx.Response(204)
 
     with mock_client(handler) as client:
-        UsgsSource().fetch(client, SINCE, ROMANIA_BBOX)
+        source.fetch(client, SINCE, ROMANIA_BBOX)
 
     params = seen[0].params
+    assert params["format"] == fmt
     assert params["starttime"] == "2026-09-18T11:00:00"
     assert float(params["minlatitude"]) == ROMANIA_BBOX.min_latitude
+    assert float(params["maxlongitude"]) == ROMANIA_BBOX.max_longitude
     assert params["orderby"] == "time"
 
 
@@ -161,4 +175,69 @@ def test_fetch_all_isolates_failing_sources(mock_client) -> None:
     assert by_name["emsc"].error is not None and "ReadTimeout" in by_name["emsc"].error
     assert by_name["usgs"].error is None
     assert len(by_name["usgs"].events) == 1
-    assert SINCE + timedelta(0) == SINCE
+
+
+def test_every_source_name_has_a_source_in_priority_order() -> None:
+    assert list(SOURCES) == list(SourceName)
+    assert [s.name for s in build_sources(Settings(sources=(SourceName.USGS,)))] == ["usgs"]
+
+
+def test_poll_hands_over_each_source_without_waiting_for_slow_ones(client, caplog) -> None:
+    fast_arrived = threading.Event()
+    received: list[str] = []
+
+    def sink(events: list[Earthquake]) -> None:
+        received.append(events[0].source)
+        fast_arrived.set()
+
+    sources = [
+        FakeSource("usgs", [make_quake(source="usgs", event_id="u1")], gate=fast_arrived),
+        FakeSource("infp", SourceError("HTTP 503")),
+        FakeSource("emsc", [make_quake(source="emsc", event_id="e1")]),
+    ]
+
+    Poller(Settings(), sources, client).poll_once(sink)
+
+    assert received == ["emsc", "usgs"]
+    assert "Source infp unavailable: SourceError: HTTP 503" in caplog.text
+
+
+def test_every_source_failing_is_logged_as_an_error(client, caplog) -> None:
+    sources = [FakeSource("infp", SourceError("HTTP 502")), FakeSource("emsc", SourceError("x"))]
+    Poller(Settings(), sources, client).poll_once(lambda events: None)
+    assert any(r.levelno == logging.ERROR for r in caplog.records)
+
+
+class SleepyClock(threading.Event):
+    """Wall clock whose first wait is interrupted by ten minutes of system sleep."""
+
+    def __init__(self, polls_before_stop: int) -> None:
+        super().__init__()
+        self.now = 0.0
+        self.waits = 0
+        self.polls_before_stop = polls_before_stop
+        self.polls: list[float] = []
+
+    def time(self) -> float:
+        return self.now
+
+    def wait(self, timeout: float | None = None) -> bool:
+        self.now += (timeout or 0.0) + (600 if self.waits == 0 else 0)
+        self.waits += 1
+        return self.is_set()
+
+    def poll(self, *args) -> None:
+        self.polls.append(self.now)
+        if len(self.polls) == self.polls_before_stop:
+            self.set()
+
+
+def test_polls_right_after_wake_and_warns_about_the_gap(monkeypatch, caplog, client) -> None:
+    clock = SleepyClock(polls_before_stop=3)
+    monkeypatch.setattr("eq_notifier.sources.time", clock)
+    monkeypatch.setattr(Poller, "poll_once", clock.poll)
+
+    Poller(Settings(), [], client).run(lambda events: None, clock)
+
+    assert clock.polls == [0.0, 601.0, 631.0]
+    assert "No poll for 601s" in caplog.text

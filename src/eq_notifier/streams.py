@@ -12,7 +12,7 @@ from websockets.sync.client import ClientConnection, connect
 
 from eq_notifier import USER_AGENT
 from eq_notifier.config import Settings
-from eq_notifier.events import Earthquake, Sink
+from eq_notifier.events import Earthquake, Feed, Sink
 from eq_notifier.sources import describe_error, parse_emsc_feature
 
 log = logging.getLogger(__name__)
@@ -24,12 +24,7 @@ RECONNECT_MIN_SECONDS = 1.0
 RECONNECT_MAX_SECONDS = 60.0
 
 
-class Stream(Protocol):
-    @property
-    def name(self) -> str: ...
-
-    def run(self, sink: Sink, stop: threading.Event) -> None: ...
-
+class Stream(Feed, Protocol):
     def probe(self) -> str | None: ...
 
 

@@ -2,7 +2,6 @@
 
 import logging
 import threading
-import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -13,15 +12,12 @@ import httpx
 
 from eq_notifier import USER_AGENT
 from eq_notifier.config import Settings
-from eq_notifier.events import Earthquake, EventGroup, Sink, group_duplicates
+from eq_notifier.events import Earthquake, EventGroup, Feed, group_duplicates
 from eq_notifier.notifiers import Notifier, send_all
-from eq_notifier.sources import Source, fetch_each
 from eq_notifier.state import SeenEvents
-from eq_notifier.streams import Stream
 
 log = logging.getLogger(__name__)
 
-WAKE_CHECK_SECONDS = 1.0
 FEED_CHECK_SECONDS = 1.0
 
 
@@ -67,6 +63,8 @@ def format_alert(group: EventGroup, settings: Settings, now: datetime) -> tuple[
 
 
 class Verdict(StrEnum):
+    """What the alerter does with one earthquake."""
+
     IGNORE = "ignored"
     SEEN = "already alerted"
     ALERT = "would alert"
@@ -116,7 +114,7 @@ class Alerter:
             quake.magnitude,
             quake.region or "(no region)",
             quake.time.isoformat(),
-            group.sources,
+            ", ".join(group.sources),
         )
         title, message = format_alert(group, self.settings, now)
         if not send_all(self.notifiers, self.client, title, message):
@@ -126,94 +124,31 @@ class Alerter:
         return True
 
 
-def sleep_until(deadline: float, stop: threading.Event) -> None:
-    """Wait for a wall-clock deadline, returning promptly after system sleep or on `stop`."""
-    while (remaining := deadline - time.time()) > 0:
-        if stop.wait(min(remaining, WAKE_CHECK_SECONDS)):
-            return
-
-
-def poll_once(
-    settings: Settings, sources: Sequence[Source], client: httpx.Client, sink: Sink
-) -> None:
-    """Query every source once, handing over each source's reports as soon as it answers."""
-    since = datetime.now(UTC) - settings.max_event_age
-    failed = 0
-    for result in fetch_each(sources, client, since, settings.bbox):
-        if result.error:
-            failed += 1
-            log.warning("Source %s unavailable: %s", result.source, result.error)
-        elif result.events:
-            sink(result.events)
-    if sources and failed == len(sources):
-        log.error("Every source failed this cycle; will try again")
-
-
-def poll_forever(
-    settings: Settings,
-    sources: Sequence[Source],
-    client: httpx.Client,
-    sink: Sink,
-    stop: threading.Event,
-) -> None:
-    """Poll on a wall-clock schedule until `stop` is set, warning when cycles were missed."""
-    interval = settings.poll_interval_seconds
-    previous: float | None = None
-    while not stop.is_set():
-        started = time.time()
-        if previous is not None and (gap := started - previous) > 2 * interval:
-            log.warning("No poll for %.0fs (machine asleep?); alerts may have been delayed", gap)
-        previous = started
-        try:
-            poll_once(settings, sources, client, sink)
-        except Exception:
-            log.exception("Polling cycle failed; continuing")
-        sleep_until(started + interval, stop)
-
-
 class FeedDiedError(RuntimeError):
     """A feed thread ended on its own; the supervisor should restart the process."""
 
 
-def run(
-    alerter: Alerter,
-    sources: Sequence[Source],
-    streams: Sequence[Stream],
-    *,
-    stop: threading.Event | None = None,
-) -> None:
+def run(alerter: Alerter, feeds: Sequence[Feed], *, stop: threading.Event | None = None) -> None:
     """Run every feed in its own thread and alert on their reports until `stop` is set."""
     stop = stop if stop is not None else threading.Event()
     reports: Queue[list[Earthquake]] = Queue()
-    settings = alerter.settings
-    feeds = [
-        threading.Thread(
-            target=poll_forever,
-            args=(settings, sources, alerter.client, reports.put, stop),
-            name="poller",
-            daemon=True,
-        ),
-        *(
-            threading.Thread(
-                target=stream.run, args=(reports.put, stop), name=stream.name, daemon=True
-            )
-            for stream in streams
-        ),
+    threads = [
+        threading.Thread(target=feed.run, args=(reports.put, stop), name=feed.name, daemon=True)
+        for feed in feeds
     ]
+    settings = alerter.settings
     log.info(
-        "Streaming %s; polling %s every %.0fs; alert when M>=%.1f%s; notifying via %s",
-        ", ".join(s.name for s in streams) or "nothing",
-        ", ".join(s.name for s in sources) or "nothing",
-        settings.poll_interval_seconds,
+        "Watching %s; alert when M>=%.1f%s; notifying via %s",
+        ", ".join(feed.name for feed in feeds) or "nothing",
         settings.min_magnitude,
         f" within {settings.radius_km:.0f} km" if settings.location else "",
         ", ".join(n.name for n in alerter.notifiers),
     )
-    for feed in feeds:
-        feed.start()
+    for thread in threads:
+        thread.start()
     try:
         while not stop.is_set():
-            if dead := [feed.name for feed in feeds if not feed.is_alive()]:
+            if dead := [thread.name for thread in threads if not thread.is_alive()]:
                 raise FeedDiedError(f"feed stopped unexpectedly: {', '.join(dead)}")
             try:
                 batch = reports.get(timeout=FEED_CHECK_SECONDS)

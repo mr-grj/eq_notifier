@@ -1,5 +1,7 @@
-"""Small earthquake notifier: polls public seismic feeds and pushes alerts."""
+"""Small earthquake notifier: watches public seismic feeds and pushes alerts."""
 
-__version__ = "1.1.0"
+from importlib.metadata import version
+
+__version__ = version("eq-notifier")
 
 USER_AGENT = f"eq-notifier/{__version__} (https://github.com/mr-grj/eq_notifier)"
