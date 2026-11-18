@@ -6,11 +6,9 @@ DOMAIN  := gui/$(shell id -u)
 start:          ## install (or refresh) the service and start it at login
 	mkdir -p $(dir $(PLIST)) $(HOME)/Library/Logs
 	$(call render,deploy/$(SERVICE).plist,$(PLIST))
-	@if launchctl print $(DOMAIN)/$(SERVICE) >/dev/null 2>&1; then \
-	    launchctl kickstart -k $(DOMAIN)/$(SERVICE); \
-	else \
-	    launchctl bootstrap $(DOMAIN) $(PLIST); \
-	fi
+	-@launchctl bootout $(DOMAIN)/$(SERVICE) 2>/dev/null
+	@while launchctl print $(DOMAIN)/$(SERVICE) >/dev/null 2>&1; do sleep 0.2; done
+	launchctl bootstrap $(DOMAIN) $(PLIST)
 	@echo "started; logs: make logs"
 
 stop:           ## stop the service and stop starting it at login

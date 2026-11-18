@@ -6,6 +6,8 @@
   <key>Label</key><string>ro.eq-notifier</string>
   <key>ProgramArguments</key>
   <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-is</string>
     <string>__UV__</string>
     <string>run</string>
     <string>eq-notifier</string>
